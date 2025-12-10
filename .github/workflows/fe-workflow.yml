@@ -57,7 +57,7 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      ENV_S3_BUCKET: ${{ secrets.DEPLOY_BUCKET }}
+      DEPLOY_BUCKET: ${{ secrets.DEPLOY_BUCKET }}
 
     steps:
       # 파일 전송(SCP)을 위해 소스코드 체크아웃 필수
@@ -79,7 +79,7 @@ jobs:
       # 2. S3에서 .env 파일 다운로드
       - name: Download .env from S3
         run: |
-          aws s3 cp s3://${{ env.ENV_S3_BUCKET }}/.env ./.env
+          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/.env ./.env
 
       # 대상 인스턴스 (IP) 확인
       - name: Get Instance IPs
