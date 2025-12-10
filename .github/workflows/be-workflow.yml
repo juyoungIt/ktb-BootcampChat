@@ -20,7 +20,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
-          cache-dependency-path: ./apps/backend/**/*.gradle*
+          cache-dependency-path: apps/backend/**/*.gradle*
       - run: ./gradlew test --no-daemon
 
   build-and-push-image:
@@ -35,8 +35,8 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/build-push-action@v5
         with:
-          context: ./apps/frontend
-          file: ./apps/frontend/Dockerfile
+          context: ./apps/backend
+          file: ./apps/backend/Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ktb-team20-be:latest
