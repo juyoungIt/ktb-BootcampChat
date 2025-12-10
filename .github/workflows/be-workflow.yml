@@ -13,6 +13,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: "temp_test_secret_key_12345"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Java and Cache Maven Dependencies
