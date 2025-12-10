@@ -43,7 +43,7 @@ jobs:
       # ----------------------------------------------------------------
       - name: Download .env from S3 and export vars
         run: |
-          aws s3 cp s3://${{ secrets.DEPLOY_BUCKET }}/.env ./apps/frontend/.env
+          aws s3 cp s3://${{ secrets.DEPLOY_BUCKET }}/frontend/.env ./apps/frontend/.env
           echo "NEXT_PUBLIC_API_URL=$(grep NEXT_PUBLIC_API_URL ./apps/frontend/.env | cut -d '=' -f2 | tr -d '\r')" >> $GITHUB_ENV
           echo "NEXT_PUBLIC_SOCKET_URL=$(grep NEXT_PUBLIC_SOCKET_URL ./apps/frontend/.env | cut -d '=' -f2 | tr -d '\r')" >> $GITHUB_ENV
       # ----------------------------------------------------------------
