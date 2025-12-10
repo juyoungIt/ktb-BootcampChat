@@ -1,16 +1,15 @@
 name: KTB Team20 Backend CI/CD (Maven Based)
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'apps/backend/**' 
-      - '.github/workflows/be-workflow.yml'
-  pull_request:
+  push: # main 브랜치에 푸시될 때마다 워크플로우 실행
     branches:
       - main
+    paths: # 다음 경로의 파일이 변경될 때만 실행
+      - 'apps/backend/**' 
+      - '.github/workflows/be-workflow.yml'
 
 jobs:
+  # 1. Maven 테스트 수행 (현재 DB Container 관련 이슈로 인해 생략 - 추후 수정필요)
   test:
     runs-on: ubuntu-latest
     env:
@@ -26,31 +25,45 @@ jobs:
           cache-dependency-path: apps/backend/pom.xml 
       - name: Run Maven Tests
         run: cd apps/backend && ./mvnw clean package -DskipTests
-
+  # 2. Docker 이미지 빌드 및 푸시
   build-and-push-image:
     needs: test
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      # 2-1. Repository 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # 2-2. AWS 자격증명 설정
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      # 2-3. S3에 docker-compose-ci.yaml 파일 업로드
+      - name: Upload docker-compose-ci.yaml to S3
+        run: aws s3 cp ./apps/backend/docker-compose-ci.yaml s3://${{ secrets.DEPLOY_BUCKET }}/backend/docker-compose.yaml
+      # 2-4. Docker Hub 로그인
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v5
+      # 2-5. Docker 이미지 빌드 및 푸시
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
         with:
           context: ./apps/backend
-          file: ./apps/backend/Dockerfile
+          file: ./apps/backend/Dockerfile-ci
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ktb-team20-be:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/ktb-team20-be:${{ github.sha }}
-
-  deploy-parallel:
+  # 3. 배포
+  deploy:
     needs: build-and-push-image
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    env:
+    env: # 배포에 필요한 환경 변수 로드
       TARGET_GROUP_ARN: ${{ secrets.BE_TARGET_GROUP_ARN }}
       APP_USER: ubuntu
       IMAGE_TAG: ${{ github.sha }}
@@ -59,28 +72,27 @@ jobs:
       DEPLOY_BUCKET: ${{ secrets.DEPLOY_BUCKET }} 
 
     steps:
-      - uses: actions/checkout@v4
-
+      # 3-1. Repository 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # 3-2. AWS 자격증명 설정
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      # .pem 생성
+      # 3-3. 각 인스턴스 SSH 접속을 위한 .pem key 생성
       - name: Create PEM key
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ./key.pem
           chmod 600 ./key.pem
-
-      # S3에서 필요한 파일 다운로드
+      # 3-4. S3에서 필요한 파일 다운로드
       - name: Download .env from S3
         run: |
           aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/.env ./.env
           aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/docker-compose.yaml ./docker-compose.yaml
-
-       # 대상 인스턴스 (IP) 확인
+      # 3-5. 대상 그룹에서 배포 대상 인스턴스 (IP) 확인
       - name: Get Instance IPs
         id: get-ips
         run: |
@@ -88,13 +100,11 @@ jobs:
           if [ -z "$IDS" ]; then echo "No instances"; exit 1; fi
           IPS=$(aws ec2 describe-instances --instance-ids $IDS --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
           echo "instance_ips=$IPS" >> $GITHUB_OUTPUT
-
-      # 병렬 배포
+      # 3-6. 배포
       - name: Deploy to all instances
         run: |
           IFS=' ' read -r -a IPS <<< "${{ steps.get-ips.outputs.instance_ips }}"
           PIDS=()
-
           for IP in "${IPS[@]}"; do
             echo "🚀 배포 시작: $IP"
             (
@@ -113,7 +123,6 @@ jobs:
             ) & 
             PIDS+=($!)
           done
-
           for PID in "${PIDS[@]}"; do wait $PID; done
           rm -f ./key.pem
           echo "🎉 모든 배포 완료!"
