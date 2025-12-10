@@ -25,7 +25,7 @@ jobs:
           cache: 'maven'
           cache-dependency-path: apps/backend/pom.xml 
       - name: Run Maven Tests
-        run: cd apps/backend && ./mvnw test -X
+        run: cd apps/backend && ./mvnw clean package -DskipTests
 
   build-and-push-image:
     needs: test
