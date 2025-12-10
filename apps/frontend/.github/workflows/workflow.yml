@@ -1,0 +1,117 @@
+name: KTB Team20 Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [ 19.x, 20.x, 22.x ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Set up Node.js runtime
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install Dependencies
+        run: npm install
+      - name: Run tests
+        run: npm test
+
+  build-and-push-image:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/ktb-team20-fe:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/ktb-team20-fe:${{ github.sha }}
+
+  deploy-parallel:
+    needs: build-and-push-image
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      TARGET_GROUP_ARN: ${{ secrets.FE_TARGET_GROUP_ARN }}
+      APP_USER: ubuntu
+      IMAGE_TAG: ${{ github.sha }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      ENV_S3_BUCKET: ${{ secrets.DEPLOY_BUCKET }}
+
+    steps:
+      # 파일 전송(SCP)을 위해 소스코드 체크아웃 필수
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 열쇠(.pem) 생성
+      - name: Create PEM key
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ./key.pem
+          chmod 600 ./key.pem
+
+      # 2. S3에서 .env 파일 다운로드
+      - name: Download .env from S3
+        run: |
+          aws s3 cp s3://${{ env.ENV_S3_BUCKET }}/.env ./.env
+
+      # 대상 인스턴스 (IP) 확인
+      - name: Get Instance IPs
+        id: get-ips
+        run: |
+          IDS=$(aws elbv2 describe-target-health --target-group-arn ${{ env.TARGET_GROUP_ARN }} --query 'TargetHealthDescriptions[*].Target.Id' --output text)
+          if [ -z "$IDS" ]; then echo "No instances"; exit 1; fi
+          IPS=$(aws ec2 describe-instances --instance-ids $IDS --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
+          echo "instance_ips=$IPS" >> $GITHUB_OUTPUT
+
+      # 병렬 배포
+      - name: Deploy to all instances
+        run: |
+          IFS=' ' read -r -a IPS <<< "${{ steps.get-ips.outputs.instance_ips }}"
+          PIDS=()
+
+          for IP in "${IPS[@]}"; do
+            echo "🚀 배포 시작: $IP"
+            (
+              # 1. 파일 직접 던져주기 (SCP)
+              scp -i ./key.pem -o StrictHostKeyChecking=no ./docker-compose.yaml $APP_USER@$IP:/home/$APP_USER/docker-compose.yaml
+              scp -i ./.env -o StrictHostKeyChecking=no ./.env $APP_USER@$IP:/home/$APP_USER/.env
+              # 2. 원격 접속해서 실행만 시키기 (SSH)
+              ssh -i ./key.pem -o StrictHostKeyChecking=no $APP_USER@$IP << EOF
+                set -e
+                echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+                sed -i 's|{{IMAGE_TAG}}|$IMAGE_TAG|g' /home/$APP_USER/docker-compose.yaml
+                docker compose -f /home/$APP_USER/docker-compose.yaml pull
+                docker compose -f /home/$APP_USER/docker-compose.yaml up -d --remove-orphans
+          EOF
+            ) & 
+            PIDS+=($!)
+          done
+
+          for PID in "${PIDS[@]}"; do wait $PID; done
+          rm -f ./key.pem
+          echo "🎉 모든 배포 완료!"
