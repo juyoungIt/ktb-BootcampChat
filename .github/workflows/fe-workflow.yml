@@ -76,9 +76,9 @@ jobs:
 
       # 2. S3에서 필요한 파일 다운로드
       - name: Download .env from S3
-        run:
-          - aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/frontend/.env ./.env
-          - aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/docker-compose.yaml ./docker-compose.yaml
+        run: |
+          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/frontend/.env ./.env
+          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/frontend/docker-compose.yaml ./docker-compose.yaml
 
       # 대상 인스턴스 (IP) 확인
       - name: Get Instance IPs
