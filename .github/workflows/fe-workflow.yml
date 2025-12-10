@@ -40,7 +40,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: docker/build-push-action@v5
         with:
-          context: apps/frontend
+          context: ./apps/frontend
           file: Dockerfile
           push: true
           tags: |
