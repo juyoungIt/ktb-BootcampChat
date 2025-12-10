@@ -3,8 +3,9 @@ name: KTB Team20 Frontend CI/CD
 on:
   push:
     branches: [ main ]
-    # paths:
-    #   - 'apps/frontend/**' 
+    paths:
+      - 'apps/frontend/**' 
+      - '.github/workflows/fe-workflow.yml'
   pull_request:
     branches:
       - main

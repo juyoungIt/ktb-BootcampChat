@@ -3,8 +3,9 @@ name: KTB Team20 Backend CI/CD
 on:
   push:
     branches: [ main ]
-    # paths:
-    #   - 'apps/backend/**'
+    paths:
+      - 'apps/backend/**' 
+      - '.github/workflows/be-workflow.yml'
   pull_request:
     branches:
       - main
