@@ -11,6 +11,14 @@ RUN npm i
 # 소스 코드 복사
 COPY . .
 
+# CI/CD에서 넘겨준 build-args를 여기서 받습니다.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+
+# 받은 ARG를 환경변수(ENV)로 설정하여 npm run build가 볼 수 있게 합니다.
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+
 # Next.js 빌드
 RUN npm run build
 
