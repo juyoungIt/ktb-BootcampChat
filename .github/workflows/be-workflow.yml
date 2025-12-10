@@ -51,7 +51,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
-      TARGET_GROUP_ARN: ${{ secrets.TARGET_GROUP_ARN }}
+      TARGET_GROUP_ARN: ${{ secrets.BE_TARGET_GROUP_ARN }}
       APP_USER: ubuntu
       IMAGE_TAG: ${{ github.sha }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -74,9 +74,11 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ./key.pem
           chmod 600 ./key.pem
 
-      # S3에서 .env 파일 다운로드
+      # S3에서 필요한 파일 다운로드
       - name: Download .env from S3
-        run: aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/.env ./.env
+        run: |
+          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/.env ./.env
+          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/docker-compose.yaml ./docker-compose.yaml
 
        # 대상 인스턴스 (IP) 확인
       - name: Get Instance IPs
@@ -96,18 +98,15 @@ jobs:
           for IP in "${IPS[@]}"; do
             echo "🚀 배포 시작: $IP"
             (
-              # 6-A. 파일 직접 던져주기 (SCP)
-              # docker-compose.yaml 파일이 루트에 있다고 가정합니다.
+              # 1. 파일 직접 던져주기 (SCP)
               scp -i ./key.pem -o StrictHostKeyChecking=no ./docker-compose.yaml $APP_USER@$IP:/home/$APP_USER/docker-compose.yaml
-              
-              # 6-B. !!! 이전 오류 수정: -i 옵션에 .env 파일이 아닌 키 파일(.pem) 사용 !!!
               scp -i ./key.pem -o StrictHostKeyChecking=no ./.env $APP_USER@$IP:/home/$APP_USER/.env
-              
               # 2. 원격 접속해서 실행만 시키기 (SSH)
               ssh -i ./key.pem -o StrictHostKeyChecking=no $APP_USER@$IP << EOF
                 set -e
                 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
                 sed -i 's|{{IMAGE_TAG}}|$IMAGE_TAG|g' /home/$APP_USER/docker-compose.yaml
+                docker compose -f /home/$APP_USER/docker-compose.yaml down || true
                 docker compose -f /home/$APP_USER/docker-compose.yaml pull
                 docker compose -f /home/$APP_USER/docker-compose.yaml up -d --remove-orphans
           EOF
