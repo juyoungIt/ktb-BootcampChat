@@ -74,10 +74,11 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ./key.pem
           chmod 600 ./key.pem
 
-      # 2. S3에서 .env 파일 다운로드
+      # 2. S3에서 필요한 파일 다운로드
       - name: Download .env from S3
-        run: |
-          aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/.env ./.env
+        run:
+          - aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/frontend/.env ./.env
+          - aws s3 cp s3://${{ env.DEPLOY_BUCKET }}/backend/docker-compose.yaml ./docker-compose.yaml
 
       # 대상 인스턴스 (IP) 확인
       - name: Get Instance IPs
@@ -99,7 +100,7 @@ jobs:
             (
               # 1. 파일 직접 던져주기 (SCP)
               scp -i ./key.pem -o StrictHostKeyChecking=no ./docker-compose.yaml $APP_USER@$IP:/home/$APP_USER/docker-compose.yaml
-              scp -i ./.env -o StrictHostKeyChecking=no ./.env $APP_USER@$IP:/home/$APP_USER/.env
+              scp -i ./key.pem -o StrictHostKeyChecking=no ./.env $APP_USER@$IP:/home/$APP_USER/.env
               # 2. 원격 접속해서 실행만 시키기 (SSH)
               ssh -i ./key.pem -o StrictHostKeyChecking=no $APP_USER@$IP << EOF
                 set -e
