@@ -11,7 +11,7 @@ on:
       - main
 
 jobs:
-  test:
+  check-dependency:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,8 +25,6 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Install Dependencies
         run: npm install
-      # - name: Run tests
-      #   run: npm test
 
   build-and-push-image:
     needs: test
