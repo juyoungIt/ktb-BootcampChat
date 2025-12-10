@@ -106,6 +106,7 @@ jobs:
                 set -e
                 echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
                 sed -i 's|{{IMAGE_TAG}}|$IMAGE_TAG|g' /home/$APP_USER/docker-compose.yaml
+                docker compose -f /home/$APP_USER/docker-compose.yaml down || true
                 docker compose -f /home/$APP_USER/docker-compose.yaml pull
                 docker compose -f /home/$APP_USER/docker-compose.yaml up -d --remove-orphans
           EOF
