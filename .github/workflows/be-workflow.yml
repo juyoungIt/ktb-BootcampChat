@@ -20,6 +20,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
+          cache-dependency-path: apps/backend/**/*.gradle*
       - run: ./gradlew test --no-daemon
 
   build-and-push-image:
