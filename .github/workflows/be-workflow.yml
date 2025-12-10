@@ -3,8 +3,8 @@ name: KTB Team20 Backend CI/CD
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'apps/backend/**'
+    # paths:
+    #   - 'apps/backend/**'
   pull_request:
     branches:
       - main

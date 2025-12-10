@@ -3,8 +3,8 @@ name: KTB Team20 Frontend CI/CD
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'apps/frontend/**' 
+    # paths:
+    #   - 'apps/frontend/**' 
   pull_request:
     branches:
       - main
