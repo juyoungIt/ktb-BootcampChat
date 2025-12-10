@@ -24,7 +24,7 @@ jobs:
   #     - run: ./gradlew test --no-daemon
 
   build-and-push-image:
-    needs: test
+    # needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
